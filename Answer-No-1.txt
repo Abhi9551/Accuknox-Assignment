@@ -1,0 +1,37 @@
+By default, Django signals are executed synchronously. This means that when a signal is sent, the receiver function is executed in the same thread as the signal sender, and the process is blocked until the receiver function finishes execution.
+
+Here’s a simple code snippet that demonstrates this behavior:
+
+1. Create a Django Signal
+
+# signals.py
+from django.db.models.signals import post_save
+from django.dispatch import receiver, Signal
+from django.contrib.auth.models import User
+import time
+
+# Define a custom signal
+custom_signal = Signal()
+
+# Receiver for post_save signal
+@receiver(post_save, sender=User)
+def user_post_save_receiver(sender, instance, **kwargs):
+    print("Signal received! Processing started.")
+    time.sleep(5)  # Simulate a long-running task
+    print("Signal processing finished.")
+
+2. Trigger the Signal
+
+# views.py (or you can do this in the Django shell)
+from django.contrib.auth.models import User
+
+# Creating a new user
+User.objects.create(username='testuser', password='password')
+
+print("User created!")
+
+Output:
+Signal received! Processing started.
+# 5 seconds pause
+Signal processing finished.
+User created!

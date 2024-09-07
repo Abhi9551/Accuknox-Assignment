@@ -1,0 +1,64 @@
+Yes, by default, Django signals (such as post_save, pre_save, post_delete, etc.) run in the same database transaction as the caller. This means that if a transaction is rolled back, any changes made in the signal receiver are also rolled back, and if the transaction is committed, the signal's changes are also committed.
+
+Code to Demonstrate Same Transaction Behavior
+We can demonstrate this by triggering a post_save signal within a transaction. We will deliberately raise an exception after saving the model but before committing the transaction, and observe whether the signal's database changes are rolled back along with the transaction.
+
+1. Signal Setup
+We'll set up a signal that modifies a different model after the post_save event of the User model.
+
+# models.py
+from django.db import models
+from django.contrib.auth.models import User
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    bio = models.TextField(blank=True)
+
+# signals.py
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from .models import User, UserProfile
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        print("Signal received: Creating UserProfile...")
+        UserProfile.objects.create(user=instance)
+        print("UserProfile created.")
+
+2. Trigger the Signal and Simulate a Transaction Rollback
+We'll create a user inside a transaction and intentionally raise an exception after the signal is triggered. This will roll back the entire transaction, including any database changes made in the signal receiver.
+
+# views.py (or you can run this in the Django shell)
+from django.db import transaction
+from django.contrib.auth.models import User
+from .models import UserProfile
+
+try:
+    with transaction.atomic():  # Start a transaction
+        print("Starting transaction...")
+        
+        # Create a new user (this triggers the post_save signal)
+        user = User.objects.create(username='testuser', password='password')
+        
+        # Check that the signal has created a UserProfile
+        print(f"UserProfile exists before exception: {UserProfile.objects.filter(user=user).exists()}")
+        
+        # Raise an exception to simulate transaction failure
+        raise Exception("Simulating an error to rollback the transaction")
+
+except Exception as e:
+    print(f"Transaction rolled back due to: {str(e)}")
+
+# Check if the UserProfile was still created
+print(f"UserProfile exists after transaction rollback: {UserProfile.objects.filter(user=user).exists()}")
+
+Expected Output:
+Starting transaction...
+Signal received: Creating UserProfile...
+UserProfile created.
+UserProfile exists before exception: True
+Transaction rolled back due to: Simulating an error to rollback the transaction
+UserProfile exists after transaction rollback: False
+
+This proves that Django signals run within the same database transaction as the caller by default. If the transaction is rolled back, any changes made in the signal handler are also rolled back.
